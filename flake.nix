@@ -18,6 +18,8 @@
           name = "stewdio-shell";
           buildInputs = with pkgs; [
             go
+            golangci-lint
+
             nodejs_23
           ];
         };
