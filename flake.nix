@@ -18,7 +18,7 @@
           name = "stewdio-shell";
           buildInputs = with pkgs; [
             go
-            nodejs_22
+            nodejs_23
           ];
         };
       };
