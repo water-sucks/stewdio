@@ -6,6 +6,7 @@ import (
 	"stewdio/cmd/checkout"
 	"stewdio/cmd/init"
 	"stewdio/cmd/pin"
+	"stewdio/cmd/server"
 
 	"github.com/spf13/cobra"
 )
@@ -27,10 +28,10 @@ func MainCommand() *cobra.Command {
 	})
 	cmd.CompletionOptions.HiddenDefaultCmd = true
 
-	// TODO: add commands
 	cmd.AddCommand(checkout.CheckoutCmd())
 	cmd.AddCommand(init_cmd.InitCMD())
 	cmd.AddCommand(pin.PinCMD())
+	cmd.AddCommand(server.ServerCommand())
 
 	return &cmd
 }
