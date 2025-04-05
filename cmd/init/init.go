@@ -65,7 +65,7 @@ func initMain(cmd *cobra.Command, opts *initOpts) error {
 }
 
 func createDotStew() {
-	err := os.Mkdir(".stew", 0775)
+	err := os.Mkdir(".stew", 0o775)
 	if err != nil {
 		fmt.Println("Could not initialize .stew directory:", err)
 		return
@@ -83,7 +83,7 @@ func createDotStew() {
 		return
 	}
 
-	err = os.MkdirAll(".stew/objects/0.1", 0775)
+	err = os.MkdirAll(".stew/objects/0.1", 0o775)
 	if err != nil {
 		fmt.Println("Could not create objects directory:", err)
 		return
@@ -94,7 +94,7 @@ func createDotStew() {
 		fmt.Println("Could not create refs file:", err)
 		return
 	}
-	defer refsFile.Close()
+	defer func() { _ = refsFile.Close() }()
 
 	var wavFiles []string
 	err = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
@@ -115,7 +115,7 @@ func createDotStew() {
 		return
 	}
 
-	err = compressFilesToTarGz(".stew/objects/0.1/audio_files.tar.gz", wavFiles)
+	err = compressFilesToTarGz(filepath.Join(".stew", "objects", "0.1", "audio_files.tar.gz"), wavFiles)
 	if err != nil {
 		fmt.Println("Could not compress audio files:", err)
 		return
@@ -127,13 +127,13 @@ func compressFilesToTarGz(dest string, files []string) error {
 	if err != nil {
 		return err
 	}
-	defer tarfile.Close()
+	defer func() { _ = tarfile.Close() }()
 
 	gzwriter := gzip.NewWriter(tarfile)
-	defer gzwriter.Close()
+	defer func() { _ = gzwriter.Close() }()
 
 	tarwriter := tar.NewWriter(gzwriter)
-	defer tarwriter.Close()
+	defer func() { _ = tarwriter.Close() }()
 
 	for _, file := range files {
 		err := addFileToTarWriter(file, tarwriter)

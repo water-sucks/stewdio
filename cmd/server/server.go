@@ -196,6 +196,75 @@ func (s *Server) GetProjectHandler(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(res)
 }
 
+type PinMetadata struct {
+	Version string `json:"version"`
+	Author  string `json:"author"`
+	// Add more fields if needed
+}
+
+func (s *Server) HandleUploadPin(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+
+	err := r.ParseMultipartForm(32 << 20)
+	if err != nil {
+		http.Error(w, "Failed to parse multipart form", http.StatusBadRequest)
+		return
+	}
+
+	metaField := r.FormValue("meta")
+	var meta PinMetadata
+	if err := json.Unmarshal([]byte(metaField), &meta); err != nil {
+		http.Error(w, "Invalid metadata JSON", http.StatusBadRequest)
+		return
+	}
+
+	if meta.Version == "" {
+		http.Error(w, "Missing version", http.StatusBadRequest)
+		return
+	}
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Missing file", http.StatusBadRequest)
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	projectDir := filepath.Join(s.DataDir, "projects", project, "objects", meta.Version)
+	exists, err := pathExists(projectDir)
+	if err != nil {
+		http.Error(w, "Error accessing project", http.StatusInternalServerError)
+		return
+	}
+	if exists {
+		http.Error(w, "Pin already exists", http.StatusConflict)
+		return
+	}
+
+	err = os.MkdirAll(projectDir, 0o755)
+	if err != nil {
+		http.Error(w, "Failed to create project directory", http.StatusInternalServerError)
+		return
+	}
+
+	dstPath := filepath.Join(projectDir, "audio_files.tar.gz")
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		http.Error(w, "Could not write file", http.StatusInternalServerError)
+		return
+	}
+	defer func() { _ = dst.Close() }()
+
+	_, err = dst.ReadFrom(file)
+	if err != nil {
+		http.Error(w, "Failed to write data", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	_, _ = w.Write([]byte("Pin uploaded"))
+}
+
 func pathExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
