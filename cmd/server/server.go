@@ -12,6 +12,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -42,6 +45,7 @@ func NewServer(dataDir string) *Server {
 		r.Post("/projects", s.CreateProjectHandler)
 		r.Delete("/projects/{project}", s.DeleteProjectHandler)
 		r.Get("/projects/{project}", s.GetProjectHandler)
+		r.Get("/projects/{project}/pins", s.HandleGetVersionList)
 		r.Post("/projects/{project}/pins", s.HandleUploadPin)
 		r.Get("/projects/{project}/pins/{version}", s.HandleFetchVersion)
 	})
@@ -268,6 +272,27 @@ func (s *Server) HandleUploadPin(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Pin uploaded"))
 }
 
+func (s *Server) HandleGetVersionList(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+
+	versions, err := os.ReadDir(filepath.Join(s.DataDir, "projects", project, "objects"))
+	if err != nil {
+		http.Error(w, "Error accessing project", http.StatusInternalServerError)
+		return
+	}
+
+	var versionsList []string
+	for _, entry := range versions {
+		if entry.IsDir() {
+			versionsList = append(versionsList, entry.Name())
+		}
+	}
+
+	sortVersionNumbers(versionsList)
+
+	_ = json.NewEncoder(w).Encode(versionsList)
+}
+
 func (s *Server) HandleFetchVersion(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
 	version := chi.URLParam(r, "version")
@@ -299,4 +324,22 @@ func pathExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+func sortVersionNumbers(versions []string) {
+	sort.Slice(versions, func(i, j int) bool {
+		mi := parseVersion(versions[i])
+		mj := parseVersion(versions[j])
+		if mi[0] != mj[0] {
+			return mi[0] < mj[0] // compare major
+		}
+		return mi[1] < mj[1] // compare minor
+	})
+}
+
+func parseVersion(v string) [2]int {
+	parts := strings.Split(v, ".")
+	major, _ := strconv.Atoi(parts[0])
+	minor, _ := strconv.Atoi(parts[1])
+	return [2]int{major, minor}
 }

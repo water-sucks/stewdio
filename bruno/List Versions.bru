@@ -1,0 +1,11 @@
+meta {
+  name: List Versions
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{url}}/projects/{{project}}/pins
+  body: none
+  auth: inherit
+}
