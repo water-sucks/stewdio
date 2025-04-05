@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	cmdUtils "stewdio/internal/cmd/utils"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/spf13/cobra"
 )
@@ -52,7 +54,7 @@ func ServerCommand() *cobra.Command {
 		Use:   "server",
 		Short: "Start a sync server for hosting Stew projects",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return serverMain(&opts)
+			return cmdUtils.CommandErrorHandler(serverMain(&opts))
 		},
 	}
 

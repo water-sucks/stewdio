@@ -30,7 +30,7 @@ func MainCommand() *cobra.Command {
 
 	cmd.AddCommand(checkout.CheckoutCmd())
 	cmd.AddCommand(init_cmd.InitCommand())
-	cmd.AddCommand(pin.PinCMD())
+	cmd.AddCommand(pin.PinCommand())
 	cmd.AddCommand(server.ServerCommand())
 
 	return &cmd

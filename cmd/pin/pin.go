@@ -16,10 +16,9 @@ import (
 	cmdUtils "stewdio/internal/cmd/utils"
 )
 
-type pinOps struct {
-}
+type pinOps struct{}
 
-func PinCMD() *cobra.Command {
+func PinCommand() *cobra.Command {
 	opts := pinOps{}
 
 	cmd := cobra.Command{
@@ -34,7 +33,7 @@ func PinCMD() *cobra.Command {
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return pinMain(cmd, &opts)
+			return cmdUtils.CommandErrorHandler(pinMain(&opts))
 		},
 	}
 
@@ -47,7 +46,7 @@ Arguments:
 	return &cmd
 }
 
-func pinMain(cmd *cobra.Command, opts *pinOps) error {
+func pinMain(opts *pinOps) error {
 	fmt.Println("Pinning current project...")
 
 	// Increment version
@@ -105,7 +104,7 @@ func readVersion() Version {
 
 func writeVersion(version Version) {
 	versionStr := fmt.Sprintf("%d.%d", version.Major, version.Minor)
-	if err := os.WriteFile(".stew/version", []byte(versionStr), 0644); err != nil {
+	if err := os.WriteFile(".stew/version", []byte(versionStr), 0o644); err != nil {
 		panic(err)
 	}
 }
@@ -171,7 +170,7 @@ func readPreviousSnapshot(version Version) map[string]bool {
 
 func storeSnapshotAndDiffs(version Version, snapshot map[string]bool, diffs []Diff) {
 	dir := fmt.Sprintf(".stew/objects/%d.%d", version.Major, version.Minor)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		panic(err)
 	}
 
@@ -180,7 +179,7 @@ func storeSnapshotAndDiffs(version Version, snapshot map[string]bool, diffs []Di
 	if err != nil {
 		panic(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "diffs.json"), data, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "diffs.json"), data, 0o644); err != nil {
 		panic(err)
 	}
 
@@ -190,7 +189,7 @@ func storeSnapshotAndDiffs(version Version, snapshot map[string]bool, diffs []Di
 		refs = append(refs, file)
 	}
 	refsData := strings.Join(refs, "\n")
-	if err := os.WriteFile(filepath.Join(dir, "refs"), []byte(refsData), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "refs"), []byte(refsData), 0o644); err != nil {
 		panic(err)
 	}
 
