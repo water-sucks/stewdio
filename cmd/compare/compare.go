@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-audio/wav"
 	"github.com/spf13/cobra"
 	cmdUtils "stewdio/internal/cmd/utils"
 )
@@ -54,43 +53,13 @@ func compareMain(opts *compareOpts) error {
 	}
 	defer newFile.Close()
 
-	err = generateDiffs(oldFile, newFile, opts.Output)
+	// Generate diffs
+	err = GenerateDiffs(oldFile, newFile, opts.Output)
 	if err != nil {
 		return err
 	}
 
 	fmt.Println("Diffs generated successfully")
-	return nil
-}
-
-func generateDiffs(oldFile, newFile *os.File, outputPath string) error {
-	oldDecoder := wav.NewDecoder(oldFile)
-	oldAudioBuf, err := oldDecoder.FullPCMBuffer()
-	if err != nil {
-		return err
-	}
-
-	newDecoder := wav.NewDecoder(newFile)
-	newAudioBuf, err := newDecoder.FullPCMBuffer()
-	if err != nil {
-		return err
-	}
-
-	if oldDecoder.BitDepth != newDecoder.BitDepth {
-		return fmt.Errorf("bit depth mismatch: old file is %d-bit, new file is %d-bit", oldDecoder.BitDepth, newDecoder.BitDepth)
-	}
-
-	additions, subtractions := calculateDiffs(oldAudioBuf.Data, newAudioBuf.Data, int(oldDecoder.BitDepth), getFormat(oldDecoder))
-
-	err = os.WriteFile(fmt.Sprintf("%s/additions.bin", outputPath), additions, 0644)
-	if err != nil {
-		return err
-	}
-
-	err = os.WriteFile(fmt.Sprintf("%s/subtractions.bin", outputPath), subtractions, 0644)
-	if err != nil {
-		return err
-	}
 
 	return nil
 }
