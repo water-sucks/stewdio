@@ -1,17 +1,10 @@
 .DS_Store
 /.direnv
 /result
-<<<<<<< HEAD
-.stew/
-=======
->>>>>>> main
 
 /build/
 /stewdio
 
 /stewdio-data/
 /tmp/
-<<<<<<< HEAD
-.stew
-=======
->>>>>>> main
+/.stew
