@@ -8,12 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
-	cmdUtils "stewdio/internal/cmd/utils"
+	"stewdio/internal/config"
 
-	"github.com/knadh/koanf"
-	"github.com/knadh/koanf/parsers/toml"
-	"github.com/knadh/koanf/providers/rawbytes"
 	"github.com/spf13/cobra"
+	cmdUtils "stewdio/internal/cmd/utils"
 )
 
 type initOpts struct {
@@ -43,7 +41,7 @@ func InitCMD() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&opts.Remote, "remote", "r", "", "Remote repository URL")
-	cmd.MarkFlagRequired("remote")
+	_ = cmd.MarkFlagRequired("remote")
 
 	cmd.SetHelpTemplate(cmd.HelpTemplate() + `
 Arguments:
@@ -58,8 +56,10 @@ func initMain(cmd *cobra.Command, opts *initOpts) error {
 	fmt.Println("Initializing project ", opts.Name)
 	fmt.Println("Using remote ", opts.Remote)
 
+	cwd, _ := os.Getwd()
+
 	createDotStew()
-	createTOML(opts.Name, opts.Remote)
+	_ = config.CreateConfig(cwd, opts.Name, opts.Remote)
 
 	return nil
 }
@@ -172,34 +172,4 @@ func addFileToTarWriter(filename string, tw *tar.Writer) error {
 		return err
 	}
 	return nil
-}
-
-func createTOML(projectName string, remoteURL string) {
-	k := koanf.New(".")
-	remote := map[string]string{
-		"server":  remoteURL,
-		"project": projectName,
-	}
-	k.Load(rawbytes.Provider([]byte{}), nil)
-	k.Set("remote", remote)
-
-	tomlBytes, err := k.Marshal(toml.Parser())
-	if err != nil {
-		fmt.Println("Error marshalling to TOML:", err)
-		return
-	}
-
-	file, err := os.Create(".stew/thamizh.toml")
-	if err != nil {
-		fmt.Println("Error creating file:", err)
-		return
-	}
-	defer file.Close()
-
-	_, err = file.Write(tomlBytes)
-	if err != nil {
-		fmt.Println("Error writing to file:", err)
-		return
-	}
-	fmt.Println("Configuration saved to .stew/thamizh.toml")
 }
