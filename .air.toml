@@ -1,0 +1,5 @@
+[build]
+  cmd = "go build -o ./build/stewdio ."
+  bin = "build/stewdio"
+  full_bin = "build/stewdio"
+  exclude_dir = ["assets", "bruno", "build", "client", "stewdio-data"]
