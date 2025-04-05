@@ -29,7 +29,7 @@ func CheckoutCmd() *cobra.Command {
 		},
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return checkoutMain(cmd, &opts)
+			return cmdUtils.CommandErrorHandler(checkoutMain(cmd, &opts))
 		},
 	}
 

@@ -29,8 +29,8 @@ func MainCommand() *cobra.Command {
 	cmd.CompletionOptions.HiddenDefaultCmd = true
 
 	cmd.AddCommand(checkout.CheckoutCmd())
-	cmd.AddCommand(init_cmd.InitCMD())
-	cmd.AddCommand(pin.PinCMD())
+	cmd.AddCommand(init_cmd.InitCommand())
+	cmd.AddCommand(pin.PinCommand())
 	cmd.AddCommand(server.ServerCommand())
 
 	return &cmd

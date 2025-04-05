@@ -2,17 +2,20 @@ package init_cmd
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 
+	"stewdio/internal/config"
+
 	cmdUtils "stewdio/internal/cmd/utils"
 
-	"github.com/knadh/koanf"
-	"github.com/knadh/koanf/parsers/toml"
-	"github.com/knadh/koanf/providers/rawbytes"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +24,7 @@ type initOpts struct {
 	Remote string
 }
 
-func InitCMD() *cobra.Command {
+func InitCommand() *cobra.Command {
 	opts := initOpts{}
 
 	cmd := cobra.Command{
@@ -38,12 +41,12 @@ func InitCMD() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return initMain(cmd, &opts)
+			return cmdUtils.CommandErrorHandler(initMain(&opts))
 		},
 	}
 
 	cmd.Flags().StringVarP(&opts.Remote, "remote", "r", "", "Remote repository URL")
-	cmd.MarkFlagRequired("remote")
+	_ = cmd.MarkFlagRequired("remote")
 
 	cmd.SetHelpTemplate(cmd.HelpTemplate() + `
 Arguments:
@@ -54,18 +57,30 @@ Arguments:
 	return &cmd
 }
 
-func initMain(cmd *cobra.Command, opts *initOpts) error {
+func initMain(opts *initOpts) error {
 	fmt.Println("Initializing project ", opts.Name)
 	fmt.Println("Using remote ", opts.Remote)
 
+	cwd, _ := os.Getwd()
+
 	createDotStew()
-	createTOML(opts.Name, opts.Remote)
+	cfg, err := config.CreateConfig(cwd, opts.Name, opts.Remote)
+	if err != nil {
+		fmt.Println("error creating config:", err)
+		return err
+	}
+
+	err = pushPin(cwd, cfg.Remote, "0.1")
+	if err != nil {
+		fmt.Println("error pushing initial pin version 0.1:", err)
+		return err
+	}
 
 	return nil
 }
 
 func createDotStew() {
-	err := os.Mkdir(".stew", 0775)
+	err := os.Mkdir(".stew", 0o775)
 	if err != nil {
 		fmt.Println("Could not initialize .stew directory:", err)
 		return
@@ -76,14 +91,14 @@ func createDotStew() {
 		fmt.Println("Could not create version file:", err)
 		return
 	}
-	defer versionFile.Close()
+	defer func() { _ = versionFile.Close() }()
 	_, err = versionFile.WriteString("0.1")
 	if err != nil {
 		fmt.Println("Could not write to version file:", err)
 		return
 	}
 
-	err = os.MkdirAll(".stew/objects/0.1", 0775)
+	err = os.MkdirAll(".stew/objects/0.1", 0o775)
 	if err != nil {
 		fmt.Println("Could not create objects directory:", err)
 		return
@@ -94,7 +109,7 @@ func createDotStew() {
 		fmt.Println("Could not create refs file:", err)
 		return
 	}
-	defer refsFile.Close()
+	defer func() { _ = refsFile.Close() }()
 
 	var wavFiles []string
 	err = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
@@ -115,7 +130,7 @@ func createDotStew() {
 		return
 	}
 
-	err = compressFilesToTarGz(".stew/objects/0.1/audio_files.tar.gz", wavFiles)
+	err = compressFilesToTarGz(filepath.Join(".stew", "objects", "0.1", "audio_files.tar.gz"), wavFiles)
 	if err != nil {
 		fmt.Println("Could not compress audio files:", err)
 		return
@@ -127,13 +142,13 @@ func compressFilesToTarGz(dest string, files []string) error {
 	if err != nil {
 		return err
 	}
-	defer tarfile.Close()
+	defer func() { _ = tarfile.Close() }()
 
 	gzwriter := gzip.NewWriter(tarfile)
-	defer gzwriter.Close()
+	defer func() { _ = gzwriter.Close() }()
 
 	tarwriter := tar.NewWriter(gzwriter)
-	defer tarwriter.Close()
+	defer func() { _ = tarwriter.Close() }()
 
 	for _, file := range files {
 		err := addFileToTarWriter(file, tarwriter)
@@ -149,7 +164,7 @@ func addFileToTarWriter(filename string, tw *tar.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	info, err := file.Stat()
 	if err != nil {
@@ -174,32 +189,62 @@ func addFileToTarWriter(filename string, tw *tar.Writer) error {
 	return nil
 }
 
-func createTOML(projectName string, remoteURL string) {
-	k := koanf.New(".")
-	remote := map[string]string{
-		"server":  remoteURL,
-		"project": projectName,
-	}
-	k.Load(rawbytes.Provider([]byte{}), nil)
-	k.Set("remote", remote)
+func pushPin(path string, remote config.Remote, version string) error {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
 
-	tomlBytes, err := k.Marshal(toml.Parser())
+	metadataBytes, err := json.Marshal(map[string]string{
+		"version": version,
+	})
 	if err != nil {
-		fmt.Println("Error marshalling to TOML:", err)
-		return
+		return fmt.Errorf("failed to encode metadata: %w", err)
+	}
+	if err := writer.WriteField("meta", string(metadataBytes)); err != nil {
+		return fmt.Errorf("failed to write meta field: %w", err)
 	}
 
-	file, err := os.Create(".stew/thamizh.toml")
-	if err != nil {
-		fmt.Println("Error creating file:", err)
-		return
+	filePath := filepath.Join(path, ".stew", "objects", version, "audio_files.tar.gz")
+	if _, err := writer.CreateFormFile("file", filepath.Base(filePath)); err != nil {
+		return fmt.Errorf("failed to create form file: %w", err)
 	}
-	defer file.Close()
 
-	_, err = file.Write(tomlBytes)
+	file, err := os.Open(filePath)
 	if err != nil {
-		fmt.Println("Error writing to file:", err)
-		return
+		return fmt.Errorf("failed to open file: %w", err)
 	}
-	fmt.Println("Configuration saved to .stew/thamizh.toml")
+	defer func() { _ = file.Close() }()
+
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		return fmt.Errorf("failed to create form file: %w", err)
+	}
+
+	if _, err := io.Copy(part, file); err != nil {
+		return fmt.Errorf("failed to copy file data: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/api/v1/projects/%s/pins", remote.Server, remote.Project)
+	req, err := http.NewRequest("POST", url, &buf)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	if res.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("upload failed: %s\n%s", res.Status, string(body))
+	}
+
+	fmt.Println("Upload successful!")
+	return nil
 }
