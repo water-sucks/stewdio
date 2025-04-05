@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "StewdioServer",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

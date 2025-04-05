@@ -1,2 +1,8 @@
 /.direnv
 /result
+
+/build/
+/stewdio
+
+/stewdio-data/
+/tmp/

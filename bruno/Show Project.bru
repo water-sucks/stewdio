@@ -1,0 +1,11 @@
+meta {
+  name: Show Project
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{url}}/projects/{{project}}
+  body: none
+  auth: inherit
+}
