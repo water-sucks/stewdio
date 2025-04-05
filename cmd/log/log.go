@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
-
 	cmdUtils "stewdio/internal/cmd/utils"
 )
 
@@ -30,12 +30,12 @@ func LogCmd() *cobra.Command {
 		},
 	}
 
-	// Limit flag for specified amount of bitches
+	// Limit flag for specified amount of versions
 	cmd.Flags().IntVarP(&opts.Limit, "limit", "l", 10, "Limit the number of log entries shown")
 
 	cmd.SetHelpTemplate(cmd.HelpTemplate() + `
 Arguments:
-  (None)      Shows the pin history up to the limit specified
+  (None)      Shows the version history up to the limit specified
 `)
 	cmdUtils.SetHelpFlagText(&cmd)
 
@@ -43,24 +43,23 @@ Arguments:
 }
 
 func logMain(cmd *cobra.Command, opts *logOpts) error {
-	// Path to the bitches
+	// Path to the versions directory
 	versionsDir := ".stew/versions"
 
-	// Read them bitches
+	// Read version files (filtered for .tar.gz)
 	files, err := readVersionFiles(versionsDir)
 	if err != nil {
 		return err
 	}
 
-	// Limit them bitches
+	// Apply limit
 	if opts.Limit > 0 && opts.Limit < len(files) {
 		files = files[:opts.Limit]
 	}
 
-	// Print them bitches out
+	// Print version files
 	fmt.Printf("Showing last %d versions:\n", len(files))
 	for _, file := range files {
-		// TODO: Adjust based on file type
 		fmt.Println(file)
 	}
 
@@ -70,26 +69,63 @@ func logMain(cmd *cobra.Command, opts *logOpts) error {
 func readVersionFiles(versionsDir string) ([]string, error) {
 	var versionFiles []string
 
-	// Open the directory
-	dir, err := os.Open(versionsDir)
+	// Use os.ReadDir to read the directory
+	dirEntries, err := os.ReadDir(versionsDir)
 	if err != nil {
-		return nil, fmt.Errorf("could not open versions directory: %v", err)
-	}
-	defer dir.Close()
-
-	// Read all bitches in the dir
-	files, err := dir.Readdirnames(-1)
-	if err != nil {
-		return nil, fmt.Errorf("could not read files in versions directory: %v", err)
+		return nil, fmt.Errorf("could not read versions directory: %v", err)
 	}
 
-	// Sort bitches to most recent on top
-	sort.Sort(sort.Reverse(sort.StringSlice(files)))
+	// Sort files in reverse order (most recent first)
+	sort.Sort(sort.Reverse(sort.StringSlice(getDirs(dirEntries))))
 
-	for _, file := range files {
-		// Possibly filter bitches for specific file types
-		versionFiles = append(versionFiles, file)
+	// Iterate over the directories (version directories)
+	for _, entry := range dirEntries {
+		// Only process directories
+		if entry.IsDir() {
+			// Construct the path to the version directory
+			versionPath := filepath.Join(versionsDir, entry.Name())
+
+			// Read files inside the version directory (filter for .tar.gz)
+			versionFilesInDir, err := readTarGzFiles(versionPath)
+			if err != nil {
+				return nil, err
+			}
+
+			// Append valid files to the list
+			versionFiles = append(versionFiles, versionFilesInDir...)
+		}
 	}
 
 	return versionFiles, nil
 }
+
+// Helper function to extract directories from os.DirEntry
+func getDirs(entries []os.DirEntry) []string {
+	var dirs []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			dirs = append(dirs, entry.Name())
+		}
+	}
+	return dirs
+}
+
+func readTarGzFiles(versionDir string) ([]string, error) {
+	var tarGzFiles []string
+
+	// Use os.ReadDir to read the version directory
+	dirEntries, err := os.ReadDir(versionDir)
+	if err != nil {
+		return nil, fmt.Errorf("could not read version directory %s: %v", versionDir, err)
+	}
+
+	// Filter for .tar.gz files
+	for _, entry := range dirEntries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".tar.gz") {
+			tarGzFiles = append(tarGzFiles, filepath.Join(versionDir, entry.Name()))
+		}
+	}
+
+	return tarGzFiles, nil
+}
+
