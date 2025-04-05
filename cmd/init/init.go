@@ -2,16 +2,21 @@ package init_cmd
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 
 	"stewdio/internal/config"
 
-	"github.com/spf13/cobra"
 	cmdUtils "stewdio/internal/cmd/utils"
+
+	"github.com/spf13/cobra"
 )
 
 type initOpts struct {
@@ -19,7 +24,7 @@ type initOpts struct {
 	Remote string
 }
 
-func InitCMD() *cobra.Command {
+func InitCommand() *cobra.Command {
 	opts := initOpts{}
 
 	cmd := cobra.Command{
@@ -36,7 +41,7 @@ func InitCMD() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return initMain(cmd, &opts)
+			return cmdUtils.CommandErrorHandler(initMain(&opts))
 		},
 	}
 
@@ -52,14 +57,24 @@ Arguments:
 	return &cmd
 }
 
-func initMain(cmd *cobra.Command, opts *initOpts) error {
+func initMain(opts *initOpts) error {
 	fmt.Println("Initializing project ", opts.Name)
 	fmt.Println("Using remote ", opts.Remote)
 
 	cwd, _ := os.Getwd()
 
 	createDotStew()
-	_ = config.CreateConfig(cwd, opts.Name, opts.Remote)
+	cfg, err := config.CreateConfig(cwd, opts.Name, opts.Remote)
+	if err != nil {
+		fmt.Println("error creating config:", err)
+		return err
+	}
+
+	err = pushPin(cwd, cfg.Remote, "0.1")
+	if err != nil {
+		fmt.Println("error pushing initial pin version 0.1:", err)
+		return err
+	}
 
 	return nil
 }
@@ -76,7 +91,7 @@ func createDotStew() {
 		fmt.Println("Could not create version file:", err)
 		return
 	}
-	defer versionFile.Close()
+	defer func() { _ = versionFile.Close() }()
 	_, err = versionFile.WriteString("0.1")
 	if err != nil {
 		fmt.Println("Could not write to version file:", err)
@@ -149,7 +164,7 @@ func addFileToTarWriter(filename string, tw *tar.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	info, err := file.Stat()
 	if err != nil {
@@ -171,5 +186,65 @@ func addFileToTarWriter(filename string, tw *tar.Writer) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func pushPin(path string, remote config.Remote, version string) error {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	metadataBytes, err := json.Marshal(map[string]string{
+		"version": version,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode metadata: %w", err)
+	}
+	if err := writer.WriteField("meta", string(metadataBytes)); err != nil {
+		return fmt.Errorf("failed to write meta field: %w", err)
+	}
+
+	filePath := filepath.Join(path, ".stew", "objects", version, "audio_files.tar.gz")
+	if _, err := writer.CreateFormFile("file", filepath.Base(filePath)); err != nil {
+		return fmt.Errorf("failed to create form file: %w", err)
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		return fmt.Errorf("failed to create form file: %w", err)
+	}
+
+	if _, err := io.Copy(part, file); err != nil {
+		return fmt.Errorf("failed to copy file data: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/api/v1/projects/%s/pins", remote.Server, remote.Project)
+	req, err := http.NewRequest("POST", url, &buf)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	if res.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("upload failed: %s\n%s", res.Status, string(body))
+	}
+
+	fmt.Println("Upload successful!")
 	return nil
 }

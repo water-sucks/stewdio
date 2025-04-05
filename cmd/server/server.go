@@ -39,6 +39,7 @@ func NewServer(dataDir string) *Server {
 		r.Post("/projects", s.CreateProjectHandler)
 		r.Delete("/projects/{project}", s.DeleteProjectHandler)
 		r.Get("/projects/{project}", s.GetProjectHandler)
+		r.Post("/projects/{project}/pins", s.HandleUploadPin)
 	})
 
 	return s
@@ -198,8 +199,6 @@ func (s *Server) GetProjectHandler(w http.ResponseWriter, r *http.Request) {
 
 type PinMetadata struct {
 	Version string `json:"version"`
-	Author  string `json:"author"`
-	// Add more fields if needed
 }
 
 func (s *Server) HandleUploadPin(w http.ResponseWriter, r *http.Request) {

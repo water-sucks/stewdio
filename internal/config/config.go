@@ -22,7 +22,7 @@ type Remote struct {
 	Project string `koanf:"project"`
 }
 
-func CreateConfig(path string, projectName string, remoteURL string) error {
+func CreateConfig(path string, projectName string, remoteURL string) (*RemoteConfig, error) {
 	cfg := RemoteConfig{
 		Remote: Remote{
 			Server:  remoteURL,
@@ -31,28 +31,28 @@ func CreateConfig(path string, projectName string, remoteURL string) error {
 	}
 
 	if err := k.Load(structs.Provider(cfg, "koanf"), nil); err != nil {
-		return fmt.Errorf("failed to load config struct: %w", err)
+		return nil, fmt.Errorf("failed to load config struct: %w", err)
 	}
 
 	tomlBytes, err := k.Marshal(toml.Parser())
 	if err != nil {
-		return fmt.Errorf("error marshalling to TOML: %w", err)
+		return nil, fmt.Errorf("error marshalling to TOML: %w", err)
 	}
 
 	// Ensure config directory exists
 	configPath := filepath.Join(path, ".stew")
 	if err := os.MkdirAll(configPath, 0o755); err != nil {
-		return fmt.Errorf("error creating config directory: %w", err)
+		return nil, fmt.Errorf("error creating config directory: %w", err)
 	}
 
 	// Write to file
 	configFile := filepath.Join(configPath, "thamizh.toml")
 	if err := os.WriteFile(configFile, tomlBytes, 0o644); err != nil {
-		return fmt.Errorf("error writing to file: %w", err)
+		return nil, fmt.Errorf("error writing to file: %w", err)
 	}
 
 	fmt.Println("Configuration saved to", configFile)
-	return nil
+	return &cfg, nil
 }
 
 func ParseConfig(path string) (*RemoteConfig, error) {
