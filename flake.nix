@@ -16,6 +16,10 @@
       perSystem = {pkgs, ...}: {
         devShells.default = pkgs.mkShell {
           name = "stewdio-shell";
+          packages = with pkgs; [
+            air
+          ];
+
           buildInputs = with pkgs; [
             go
             golangci-lint
