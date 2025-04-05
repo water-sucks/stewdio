@@ -19,6 +19,7 @@ import (
 	"time"
 
 	cmdUtils "stewdio/internal/cmd/utils"
+	"stewdio/internal/utils"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/spf13/cobra"
@@ -147,7 +148,7 @@ func (s *Server) CreateProjectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := filepath.Join(s.DataDir, req.Name)
-	exists, err := pathExists(path)
+	exists, err := utils.PathExists(path)
 	if err != nil {
 		http.Error(w, "Error accessing project", http.StatusInternalServerError)
 		return
@@ -238,7 +239,7 @@ func (s *Server) HandleUploadPin(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = file.Close() }()
 
 	projectDir := filepath.Join(s.DataDir, "projects", project, "objects", meta.Version)
-	exists, err := pathExists(projectDir)
+	exists, err := utils.PathExists(projectDir)
 	if err != nil {
 		http.Error(w, "Error accessing project", http.StatusInternalServerError)
 		return
@@ -313,17 +314,6 @@ func (s *Server) HandleFetchVersion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to stream file", http.StatusInternalServerError)
 		return
 	}
-}
-
-func pathExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		return false, nil
-	}
-	return false, err
 }
 
 func sortVersionNumbers(versions []string) {
