@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -42,6 +43,7 @@ func NewServer(dataDir string) *Server {
 		r.Delete("/projects/{project}", s.DeleteProjectHandler)
 		r.Get("/projects/{project}", s.GetProjectHandler)
 		r.Post("/projects/{project}/pins", s.HandleUploadPin)
+		r.Get("/projects/{project}/pins/{version}", s.HandleFetchVersion)
 	})
 
 	return s
@@ -264,6 +266,28 @@ func (s *Server) HandleUploadPin(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	_, _ = w.Write([]byte("Pin uploaded"))
+}
+
+func (s *Server) HandleFetchVersion(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	version := chi.URLParam(r, "version")
+
+	pinPath := filepath.Join(s.DataDir, "projects", project, "objects", version, "audio_files.tar.gz")
+
+	file, err := os.Open(pinPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("version not found: %v", err), http.StatusNotFound)
+		return
+	}
+	defer func() { _ = file.Close() }()
+
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.tar.gz"`, version))
+
+	if _, err := io.Copy(w, file); err != nil {
+		http.Error(w, "failed to stream file", http.StatusInternalServerError)
+		return
+	}
 }
 
 func pathExists(path string) (bool, error) {
