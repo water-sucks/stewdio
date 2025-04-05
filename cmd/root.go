@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"stewdio/cmd/checkout"
+	"stewdio/cmd/compare"
 	"stewdio/cmd/init"
 	"stewdio/cmd/pin"
 	"stewdio/cmd/server"
@@ -32,6 +33,7 @@ func MainCommand() *cobra.Command {
 	cmd.AddCommand(init_cmd.InitCommand())
 	cmd.AddCommand(pin.PinCommand())
 	cmd.AddCommand(server.ServerCommand())
+	cmd.AddCommand(compare.CompareCmd())
 
 	return &cmd
 }

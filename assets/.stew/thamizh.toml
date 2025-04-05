@@ -1,0 +1,4 @@
+
+[remote]
+  project = "project"
+  server = "http://localhost:6969"
