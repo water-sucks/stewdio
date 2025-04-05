@@ -1,0 +1,4 @@
+
+[remote]
+  project = "audioproject"
+  server = "localhost:8080"
