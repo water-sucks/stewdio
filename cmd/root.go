@@ -5,6 +5,7 @@ import (
 
 	"stewdio/cmd/checkout"
 	"stewdio/cmd/init"
+	"stewdio/cmd/log"
 	"stewdio/cmd/pin"
 	"stewdio/cmd/server"
 
@@ -32,6 +33,7 @@ func MainCommand() *cobra.Command {
 	cmd.AddCommand(init_cmd.InitCommand())
 	cmd.AddCommand(pin.PinCommand())
 	cmd.AddCommand(server.ServerCommand())
+	cmd.AddCommand(log.LogCmd())
 
 	return &cmd
 }
