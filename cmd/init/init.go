@@ -8,11 +8,12 @@ import (
 	"os"
 	"path/filepath"
 
+	cmdUtils "stewdio/internal/cmd/utils"
+
 	"github.com/knadh/koanf"
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/rawbytes"
 	"github.com/spf13/cobra"
-	cmdUtils "stewdio/internal/cmd/utils"
 )
 
 type initOpts struct {

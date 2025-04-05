@@ -50,14 +50,18 @@ Arguments:
 func pinMain(cmd *cobra.Command, opts *pinOps) error {
 	fmt.Println("Pinning current project...")
 
+	// Increment version
 	version := readVersion()
 	version.Minor++
 	writeVersion(version)
 
+	// Create snapshot
 	snapshot := createSnapshot()
 
+	// Compute diffs
 	diffs := computeDiffs(snapshot, version)
 
+	// Store diffs and snapshot
 	storeSnapshotAndDiffs(version, snapshot, diffs)
 
 	fmt.Println("Project pinned to version", version)
