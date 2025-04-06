@@ -30,9 +30,6 @@ func Push(path string, remote config.Remote, version string) error {
 	}
 
 	filePath := filepath.Join(path, ".stew", "objects", version, refs.ObjectTarName)
-	if _, err := writer.CreateFormFile("file", filepath.Base(filePath)); err != nil {
-		return fmt.Errorf("failed to create form file: %w", err)
-	}
 
 	file, err := os.Open(filePath)
 	if err != nil {

@@ -1,6 +1,8 @@
 package server
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,8 +11,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -46,6 +50,7 @@ func NewServer(dataDir string) *Server {
 		r.Get("/projects/{project}/pins", s.HandleGetVersionList)
 		r.Post("/projects/{project}/pins", s.HandleUploadPin)
 		r.Get("/projects/{project}/pins/{version}", s.HandleFetchVersion)
+		r.Get("/projects/{project}/pins/{version}/file", s.HandleFetchFile)
 	})
 
 	return s
@@ -301,6 +306,57 @@ func (s *Server) HandleFetchVersion(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.Copy(w, file); err != nil {
 		http.Error(w, "failed to stream file", http.StatusInternalServerError)
 		return
+	}
+}
+
+func (s *Server) HandleFetchFile(w http.ResponseWriter, r *http.Request) {
+	project := chi.URLParam(r, "project")
+	version := chi.URLParam(r, "version")
+
+	filename := r.URL.Query().Get("file")
+	if filename == "" {
+		http.Error(w, "Missing file parameter", http.StatusBadRequest)
+		return
+	}
+
+	tarPath := filepath.Join(s.DataDir, "projects", project, "objects", version, refs.ObjectTarName)
+
+	f, err := os.Open(tarPath)
+	if err != nil {
+		http.Error(w, "Failed to open archive: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		http.Error(w, "Failed to read gzip: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer func() { _ = gz.Close() }()
+
+	tr := tar.NewReader(gz)
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			http.Error(w, "File not found in archive", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, "Failed to read tar: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if strings.HasPrefix(hdr.Name, "files/") && hdr.Name == "files/"+filename {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Disposition", "inline; filename=\""+path.Base(filename)+"\"")
+
+			if _, err := io.Copy(w, tr); err != nil {
+				log.Printf("Failed to write file to response: %v", err)
+			}
+			return
+		}
 	}
 }
 

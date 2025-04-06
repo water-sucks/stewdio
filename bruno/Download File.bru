@@ -1,0 +1,11 @@
+meta {
+  name: Download File
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{url}}/projects/{{project}}/pins/{{version}}/file
+  body: none
+  auth: inherit
+}
