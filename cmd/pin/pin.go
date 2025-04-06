@@ -12,6 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	cmdUtils "stewdio/internal/cmd/utils"
+	"stewdio/internal/config"
+	pin_utils "stewdio/internal/pin"
 	"stewdio/internal/refs"
 	"stewdio/internal/tar"
 )
@@ -74,12 +76,26 @@ func pinMain(opts *PinOpts) error {
 
 	fmt.Println("Project pinned to version", version)
 
+	cfg, err := config.ParseConfig(cwd)
+	if err != nil {
+		fmt.Println("error parsing config:", err)
+		fmt.Println("unable to push pin, the repo is fucked")
+		return err
+	}
+
+	err = pin_utils.Push(cwd, cfg.Remote, version.String())
+	if err != nil {
+		fmt.Printf("error pushing pin %v: %v\n", version.String(), err)
+		fmt.Println("unable to push pin, the repo is fucked")
+		return err
+	}
+
 	return nil
 }
 
 func createSnapshot() map[string]bool {
 	snapshot := make(map[string]bool)
-	filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

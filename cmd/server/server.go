@@ -242,7 +242,7 @@ func (s *Server) HandleUploadPin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dstPath := filepath.Join(projectDir, "audio_files.tar.gz")
+	dstPath := filepath.Join(projectDir, refs.ObjectTarName)
 
 	dst, err := os.Create(dstPath)
 	if err != nil {
@@ -286,7 +286,7 @@ func (s *Server) HandleFetchVersion(w http.ResponseWriter, r *http.Request) {
 	project := chi.URLParam(r, "project")
 	version := chi.URLParam(r, "version")
 
-	pinPath := filepath.Join(s.DataDir, "projects", project, "objects", version, "audio_files.tar.gz")
+	pinPath := filepath.Join(s.DataDir, "projects", project, "objects", version, refs.ObjectTarName)
 
 	file, err := os.Open(pinPath)
 	if err != nil {

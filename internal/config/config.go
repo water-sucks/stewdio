@@ -64,7 +64,7 @@ func ParseConfig(path string) (*RemoteConfig, error) {
 	}
 
 	var cfg RemoteConfig
-	if err := k.Unmarshal("remote", &cfg); err != nil {
+	if err := k.Unmarshal("", &cfg); err != nil {
 		return nil, fmt.Errorf("error unmarshalling config: %w", err)
 	}
 
