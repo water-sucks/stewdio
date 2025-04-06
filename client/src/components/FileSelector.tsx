@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 type FileSelectorProps = {
 	onFileSelect: (files: AudioFileItem[]) => void;
@@ -8,48 +8,39 @@ type FileSelectorProps = {
 export type AudioFileItem = {
 	id: string;
 	name: string;
-	url: string; // Now contains URL instead of File
+	file: File;
 };
 
 const FileSelector: React.FC<FileSelectorProps> = ({ onFileSelect = () => { } }) => {
 	const [audioFiles, setAudioFiles] = useState<AudioFileItem[]>([]);
 	const [selectedFiles, setSelectedFiles] = useState<AudioFileItem[]>([]);
 
-	useEffect(() => {
-		const fetchFiles = async () => {
-			try {
-				const response = await fetch('http://localhost:6969/api/v1/projects');
-				const data = await response.json();
-
-				// Assuming API returns something like: [{ id, name, url }, ...]
-				const audioItems: AudioFileItem[] = data.map((item: any) => ({
-					id: item.id,
-					name: item.name,
-					url: item.url,
-				}));
-
-				setAudioFiles(audioItems);
-			} catch (err) {
-				console.error('Failed to fetch audio files:', err);
-			}
-		};
-
-		fetchFiles();
-	}, []);
+	const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const files = Array.from(e.target.files || []);
+		const newItems = files.map((file) => ({
+			id: crypto.randomUUID(),
+			name: file.name,
+			file,
+		}));
+		setAudioFiles((prev) => [...prev, ...newItems]);
+	};
 
 	const handleSelect = (file: AudioFileItem) => {
 		setSelectedFiles((prev) => {
 			let updated: AudioFileItem[];
 
 			if (prev.find((f) => f.id === file.id)) {
+				// Deselect
 				updated = prev.filter((f) => f.id !== file.id);
 			} else if (prev.length < 2) {
+				// Select new one
 				updated = [...prev, file];
 			} else {
+				// Replace the first selected file
 				updated = [prev[1], file];
 			}
 
-			onFileSelect(updated);
+			onFileSelect(updated); // Pass to parent
 			return updated;
 		});
 	};
@@ -62,7 +53,13 @@ const FileSelector: React.FC<FileSelectorProps> = ({ onFileSelect = () => { } })
 			flexDirection: 'column',
 			padding: '1rem',
 		}}>
-			<h3>Available Files</h3>
+			<input
+				type="file"
+				accept="audio/*"
+				multiple
+				onChange={handleFileUpload}
+				style={{ marginBottom: '1rem' }}
+			/>
 
 			<div style={{ overflowY: 'auto', flex: 1 }}>
 				{audioFiles.map((item) => (
