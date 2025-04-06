@@ -5,21 +5,23 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	cmdUtils "stewdio/internal/cmd/utils"
+	"stewdio/internal/refs"
+	"stewdio/internal/tar"
 )
 
-type pinOps struct{}
+type PinOpts struct {
+	Message string
+}
 
 func PinCommand() *cobra.Command {
-	opts := pinOps{}
+	opts := PinOpts{}
 
 	cmd := cobra.Command{
 		Use:   "pin",
@@ -37,6 +39,8 @@ func PinCommand() *cobra.Command {
 		},
 	}
 
+	cmd.Flags().String("message", "", "Version message")
+
 	cmd.SetHelpTemplate(cmd.HelpTemplate() + `
 Arguments:
   [VERSION]   The version to checkout
@@ -46,67 +50,31 @@ Arguments:
 	return &cmd
 }
 
-func pinMain(opts *pinOps) error {
+func pinMain(opts *PinOpts) error {
+	cwd, _ := os.Getwd()
+
+	if !refs.IsStewRepo(cwd) {
+		msg := "error: current directory is not a stewdio project"
+		fmt.Println(msg)
+		return fmt.Errorf("%s", msg)
+	}
+
 	fmt.Println("Pinning current project...")
 
-	// Increment version
-	version := readVersion()
+	version := refs.ReadVersion(cwd)
 	version.Minor++
-	writeVersion(version)
 
-	// Create snapshot
+	refs.WriteVersion(cwd, version)
+
 	snapshot := createSnapshot()
 
-	// Compute diffs
 	diffs := computeDiffs(snapshot, version)
 
-	// Store diffs and snapshot
-	storeSnapshotAndDiffs(version, snapshot, diffs)
+	storeSnapshotAndDiffs(version, snapshot, diffs, opts.Message)
 
 	fmt.Println("Project pinned to version", version)
 
 	return nil
-}
-
-type Version struct {
-	Major int `json:"major"`
-	Minor int `json:"minor"`
-}
-
-type Diff struct {
-	File string `json:"file"`
-	Type string `json:"type"`
-}
-
-func readVersion() Version {
-	data, err := os.ReadFile(".stew/version")
-	if err != nil {
-		panic(err)
-	}
-	versionStr := strings.TrimSpace(string(data))
-	versionParts := strings.Split(versionStr, ".")
-	if len(versionParts) != 2 {
-		panic("Invalid version format")
-	}
-	major, err := strconv.Atoi(versionParts[0])
-	if err != nil {
-		panic(err)
-	}
-	minor, err := strconv.Atoi(versionParts[1])
-	if err != nil {
-		panic(err)
-	}
-	return Version{
-		Major: major,
-		Minor: minor,
-	}
-}
-
-func writeVersion(version Version) {
-	versionStr := fmt.Sprintf("%d.%d", version.Major, version.Minor)
-	if err := os.WriteFile(".stew/version", []byte(versionStr), 0o644); err != nil {
-		panic(err)
-	}
 }
 
 func createSnapshot() map[string]bool {
@@ -123,14 +91,14 @@ func createSnapshot() map[string]bool {
 	return snapshot
 }
 
-func computeDiffs(snapshot map[string]bool, version Version) []Diff {
-	var diffs []Diff
+func computeDiffs(snapshot map[string]bool, version refs.Version) []refs.Diff {
+	var diffs []refs.Diff
 	previousSnapshot := readPreviousSnapshot(version)
 
 	// Detect added files
 	for file := range snapshot {
 		if _, exists := previousSnapshot[file]; !exists {
-			diffs = append(diffs, Diff{
+			diffs = append(diffs, refs.Diff{
 				File: file,
 				Type: "added",
 			})
@@ -140,7 +108,7 @@ func computeDiffs(snapshot map[string]bool, version Version) []Diff {
 	// Detect removed files
 	for file := range previousSnapshot {
 		if _, exists := snapshot[file]; !exists {
-			diffs = append(diffs, Diff{
+			diffs = append(diffs, refs.Diff{
 				File: file,
 				Type: "removed",
 			})
@@ -150,15 +118,19 @@ func computeDiffs(snapshot map[string]bool, version Version) []Diff {
 	return diffs
 }
 
-func readPreviousSnapshot(version Version) map[string]bool {
+func readPreviousSnapshot(version refs.Version) map[string]bool {
 	if version.Minor == 1 {
 		return make(map[string]bool)
 	}
-	prevVersion := Version{Major: version.Major, Minor: version.Minor - 1}
+
+	// TODO: this sucks. Doesn't track minor versions
+	prevVersion := refs.Version{Major: version.Major, Minor: version.Minor - 1}
+
 	data, err := os.ReadFile(fmt.Sprintf(".stew/objects/%d.%d/refs", prevVersion.Major, prevVersion.Minor))
 	if err != nil {
 		return make(map[string]bool)
 	}
+
 	refs := make(map[string]bool)
 	for _, line := range strings.Split(string(data), "\n") {
 		if line != "" {
@@ -168,73 +140,42 @@ func readPreviousSnapshot(version Version) map[string]bool {
 	return refs
 }
 
-func storeSnapshotAndDiffs(version Version, snapshot map[string]bool, diffs []Diff) {
+func storeSnapshotAndDiffs(version refs.Version, snapshot map[string]bool, diffs []refs.Diff, message string) {
 	dir := fmt.Sprintf(".stew/objects/%d.%d", version.Major, version.Minor)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		panic(err)
 	}
 
-	// Store diffs
-	data, err := json.Marshal(diffs)
+	tarFilePath := filepath.Join(dir, refs.ObjectTarName)
+	tarFile, err := os.Create(tarFilePath)
 	if err != nil {
 		panic(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "diffs.json"), data, 0o644); err != nil {
-		panic(err)
+	defer tarFile.Close()
+
+	gzWriter := gzip.NewWriter(tarFile)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	if message == "" {
+		message = fmt.Sprintf("Pinned version %d.%d", version.Major, version.Minor)
 	}
 
-	// Store refs
-	var refs []string
-	for file := range snapshot {
-		refs = append(refs, file)
-	}
-	refsData := strings.Join(refs, "\n")
-	if err := os.WriteFile(filepath.Join(dir, "refs"), []byte(refsData), 0o644); err != nil {
+	tar_utils.AddStringToTar(tarWriter, "message", message)
+
+	// 2. Write diffs.json
+	diffBytes, err := json.MarshalIndent(diffs, "", "  ")
+	if err != nil {
 		panic(err)
 	}
+	tar_utils.AddBytesToTar(tarWriter, "diffs.json", diffBytes)
 
-	// Create tar.gz for added files only if there are added files
-	addedFiles := []string{}
+	// 3. Add added files under files/
 	for _, diff := range diffs {
 		if diff.Type == "added" {
-			addedFiles = append(addedFiles, diff.File)
+			tar_utils.AddFileToTar(tarWriter, diff.File, filepath.Join("files", diff.File))
 		}
-	}
-	if len(addedFiles) > 0 {
-		tarFile, err := os.Create(filepath.Join(dir, "added_files.tar.gz"))
-		if err != nil {
-			panic(err)
-		}
-		defer tarFile.Close()
-		gzWriter := gzip.NewWriter(tarFile)
-		defer gzWriter.Close()
-		tarWriter := tar.NewWriter(gzWriter)
-		defer tarWriter.Close()
-		for _, file := range addedFiles {
-			addFileToTar(tarWriter, file)
-		}
-	}
-}
-
-func addFileToTar(tarWriter *tar.Writer, filePath string) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		panic(err)
-	}
-	header, err := tar.FileInfoHeader(info, "")
-	if err != nil {
-		panic(err)
-	}
-	header.Name = filePath
-	if err := tarWriter.WriteHeader(header); err != nil {
-		panic(err)
-	}
-	if _, err := io.Copy(tarWriter, file); err != nil {
-		panic(err)
 	}
 }
