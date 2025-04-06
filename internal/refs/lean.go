@@ -17,6 +17,10 @@ type Version struct {
 	Minor int `json:"minor"`
 }
 
+func (v Version) String() string {
+	return fmt.Sprintf("%d.%d", v.Major, v.Minor)
+}
+
 type Diff struct {
 	File string `json:"file"`
 	Type string `json:"type"`
