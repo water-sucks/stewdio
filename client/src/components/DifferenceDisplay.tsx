@@ -147,6 +147,7 @@ const WaveformDifference: React.FC<WaveformDifferenceProps> = ({
 						ctx.beginPath();
 						ctx.moveTo(x, centerHeight);
 						ctx.lineTo(x, centerHeight - yPositive); // Upwards
+						ctx.lineTo(x, centerHeight + yPositive); // Upwards
 						ctx.stroke();
 					}
 
@@ -158,6 +159,7 @@ const WaveformDifference: React.FC<WaveformDifferenceProps> = ({
 						ctx.beginPath();
 						ctx.moveTo(x, centerHeight);
 						ctx.lineTo(x, centerHeight - yNegative); // Downwards
+						ctx.lineTo(x, centerHeight + yNegative); // Upwards
 						ctx.stroke();
 					}
 				}
