@@ -74,11 +74,11 @@ func initMain(opts *initOpts) error {
 	}
 	_ = cfg
 
-	// err = pushPin(cwd, cfg.Remote, "0.1")
-	// if err != nil {
-	// fmt.Println("error pushing initial pin version 0.1:", err)
-	// return err
-	// }
+	err = pushPin(cwd, cfg.Remote, "0.1")
+	if err != nil {
+		fmt.Println("error pushing initial pin version 0.1:", err)
+		return err
+	}
 
 	return nil
 }
@@ -155,7 +155,7 @@ func pushPin(path string, remote config.Remote, version string) error {
 		return fmt.Errorf("failed to write meta field: %w", err)
 	}
 
-	filePath := filepath.Join(path, ".stew", "objects", version, "audio_files.tar.gz")
+	filePath := filepath.Join(path, ".stew", "objects", version, refs.ObjectTarName)
 	if _, err := writer.CreateFormFile("file", filepath.Base(filePath)); err != nil {
 		return fmt.Errorf("failed to create form file: %w", err)
 	}
