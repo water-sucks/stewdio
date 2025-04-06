@@ -16,7 +16,7 @@ type CheckoutOpts struct {
 	Version string
 }
 
-func CheckoutCommand() *cobra.Command {
+func CheckoutCmd() *cobra.Command {
 	opts := CheckoutOpts{}
 
 	return &cobra.Command{
