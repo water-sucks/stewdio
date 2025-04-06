@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 
 	"stewdio/internal/config"
+	"stewdio/internal/refs"
+	tar_utils "stewdio/internal/tar"
 
 	cmdUtils "stewdio/internal/cmd/utils"
 
@@ -64,17 +66,19 @@ func initMain(opts *initOpts) error {
 	cwd, _ := os.Getwd()
 
 	createDotStew()
+
 	cfg, err := config.CreateConfig(cwd, opts.Name, opts.Remote)
 	if err != nil {
 		fmt.Println("error creating config:", err)
 		return err
 	}
+	_ = cfg
 
-	err = pushPin(cwd, cfg.Remote, "0.1")
-	if err != nil {
-		fmt.Println("error pushing initial pin version 0.1:", err)
-		return err
-	}
+	// err = pushPin(cwd, cfg.Remote, "0.1")
+	// if err != nil {
+	// fmt.Println("error pushing initial pin version 0.1:", err)
+	// return err
+	// }
 
 	return nil
 }
@@ -92,6 +96,7 @@ func createDotStew() {
 		return
 	}
 	defer func() { _ = versionFile.Close() }()
+
 	_, err = versionFile.WriteString("0.1")
 	if err != nil {
 		fmt.Println("Could not write to version file:", err)
@@ -112,11 +117,14 @@ func createDotStew() {
 	defer func() { _ = refsFile.Close() }()
 
 	var wavFiles []string
+	snapshot := make(map[string]bool)
+
 	err = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if !info.IsDir() && filepath.Ext(path) == ".wav" {
+			snapshot[path] = true
 			wavFiles = append(wavFiles, path)
 			_, err = refsFile.WriteString(path + "\n")
 			if err != nil {
@@ -130,63 +138,7 @@ func createDotStew() {
 		return
 	}
 
-	err = compressFilesToTarGz(filepath.Join(".stew", "objects", "0.1", "audio_files.tar.gz"), wavFiles)
-	if err != nil {
-		fmt.Println("Could not compress audio files:", err)
-		return
-	}
-}
-
-func compressFilesToTarGz(dest string, files []string) error {
-	tarfile, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tarfile.Close() }()
-
-	gzwriter := gzip.NewWriter(tarfile)
-	defer func() { _ = gzwriter.Close() }()
-
-	tarwriter := tar.NewWriter(gzwriter)
-	defer func() { _ = tarwriter.Close() }()
-
-	for _, file := range files {
-		err := addFileToTarWriter(file, tarwriter)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func addFileToTarWriter(filename string, tw *tar.Writer) error {
-	file, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = file.Close() }()
-
-	info, err := file.Stat()
-	if err != nil {
-		return err
-	}
-
-	header, err := tar.FileInfoHeader(info, info.Name())
-	if err != nil {
-		return err
-	}
-	header.Name = filename
-
-	err = tw.WriteHeader(header)
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(tw, file)
-	if err != nil {
-		return err
-	}
-	return nil
+	createInitialArchive(refs.Version{Major: 0, Minor: 1}, snapshot)
 }
 
 func pushPin(path string, remote config.Remote, version string) error {
@@ -228,6 +180,7 @@ func pushPin(path string, remote config.Remote, version string) error {
 	}
 
 	url := fmt.Sprintf("%s/api/v1/projects/%s/pins", remote.Server, remote.Project)
+
 	req, err := http.NewRequest("POST", url, &buf)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -247,4 +200,36 @@ func pushPin(path string, remote config.Remote, version string) error {
 
 	fmt.Println("Upload successful!")
 	return nil
+}
+
+func createInitialArchive(version refs.Version, snapshot map[string]bool) {
+	dir := fmt.Sprintf(".stew/objects/%d.%d", version.Major, version.Minor)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		panic(err)
+	}
+
+	tarPath := filepath.Join(dir, refs.ObjectTarName)
+	tarFile, err := os.Create(tarPath)
+	if err != nil {
+		panic(err)
+	}
+	defer tarFile.Close()
+
+	gzWriter := gzip.NewWriter(tarFile)
+	defer gzWriter.Close()
+
+	tarWriter := tar.NewWriter(gzWriter)
+	defer tarWriter.Close()
+
+	// Write initial message
+	message := fmt.Sprintf("Initial version %d.%d", version.Major, version.Minor)
+	tar_utils.AddStringToTar(tarWriter, "message", message)
+
+	// Write empty diffs.json
+	tar_utils.AddBytesToTar(tarWriter, "diffs.json", []byte("[]"))
+
+	// Add all .wav files into files/
+	for file := range snapshot {
+		tar_utils.AddFileToTar(tarWriter, file, filepath.Join("files", file))
+	}
 }

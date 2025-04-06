@@ -3,22 +3,20 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"sort"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
 	cmdUtils "stewdio/internal/cmd/utils"
+	"stewdio/internal/refs"
+	"stewdio/internal/utils"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/spf13/cobra"
@@ -147,12 +145,7 @@ func (s *Server) CreateProjectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := filepath.Join(s.DataDir, req.Name)
-	exists, err := pathExists(path)
-	if err != nil {
-		http.Error(w, "Error accessing project", http.StatusInternalServerError)
-		return
-	}
-	if exists {
+	if utils.PathExists(path) {
 		http.Error(w, "Project already exists", http.StatusConflict)
 		return
 	}
@@ -238,12 +231,7 @@ func (s *Server) HandleUploadPin(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = file.Close() }()
 
 	projectDir := filepath.Join(s.DataDir, "projects", project, "objects", meta.Version)
-	exists, err := pathExists(projectDir)
-	if err != nil {
-		http.Error(w, "Error accessing project", http.StatusInternalServerError)
-		return
-	}
-	if exists {
+	if utils.PathExists(projectDir) {
 		http.Error(w, "Pin already exists", http.StatusConflict)
 		return
 	}
@@ -255,6 +243,7 @@ func (s *Server) HandleUploadPin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dstPath := filepath.Join(projectDir, "audio_files.tar.gz")
+
 	dst, err := os.Create(dstPath)
 	if err != nil {
 		http.Error(w, "Could not write file", http.StatusInternalServerError)
@@ -315,31 +304,15 @@ func (s *Server) HandleFetchVersion(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func pathExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		return false, nil
-	}
-	return false, err
-}
-
 func sortVersionNumbers(versions []string) {
 	sort.Slice(versions, func(i, j int) bool {
-		mi := parseVersion(versions[i])
-		mj := parseVersion(versions[j])
-		if mi[0] != mj[0] {
-			return mi[0] < mj[0] // compare major
-		}
-		return mi[1] < mj[1] // compare minor
-	})
-}
+		mi := refs.ParseVersion(versions[i])
+		mj := refs.ParseVersion(versions[j])
 
-func parseVersion(v string) [2]int {
-	parts := strings.Split(v, ".")
-	major, _ := strconv.Atoi(parts[0])
-	minor, _ := strconv.Atoi(parts[1])
-	return [2]int{major, minor}
+		if mi.Major != mj.Major {
+			return mi.Major < mj.Major
+		}
+
+		return mi.Minor < mj.Minor
+	})
 }
